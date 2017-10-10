@@ -1,0 +1,79 @@
+<html>
+<head>
+<meta charset="utf-8">
+  <title>Transcribe upload</title>
+ <style media="screen">
+    body {
+      display: flex;
+      min-height: 100vh;
+      width: 100%;
+      padding: 0;
+      margin: 0;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+
+    #uploader {
+      --webkit-appearance: none;
+      appearance: none;
+      width: 50%;
+      margin-bottom: 10px;
+    }
+
+</style>
+</head>
+<body>
+  <progress value="0" max="100" id="uploader">0%</progress>
+  <input type="file" value="upload" id="fileButton" />
+ <script src="https://www.gstatic.com/firebasejs/4.5.0/firebase.js"></script>
+<script>
+  // Initialize Firebase
+  var config = {
+    apiKey: "AIzaSyDukqUvjAQfNjbmsWbQq_HbJJ6V4OfDJY4",
+    authDomain: "ulc-transcribe.firebaseapp.com",
+    databaseURL: "https://ulc-transcribe.firebaseio.com",
+    projectId: "ulc-transcribe",
+    storageBucket: "ulc-transcribe.appspot.com",
+    messagingSenderId: "386175619124"
+  };
+  firebase.initializeApp(config);
+
+  //Get elements
+  var uploader = document.getElementById('uploader')
+  var fileButton = document.getElementById('fileButton')
+
+  //Listen for file selection event
+  //Get file
+  fileButton.addEventListener('change', function(e){
+     var file = e.target.files[0]
+
+     //create storage ref
+     var storageRef = firebase.storage().ref('ucl-uploads/' + file.name)
+
+     //Upload file
+     var task = storageRef.put(file)
+
+     //Update progress bar
+     task.on('state_changed',
+      function progress(snapshot){
+        var percentage = (snapshot.bytesTransferred /
+          snapshot.totalBytes) * 100;
+        uploader.value = percentage
+      },
+
+      function error(err){
+
+      },
+
+      function complete() {
+        var downloadURL = task.snapshot.downloadURL;
+        console.log("url" + downloadURL);
+      }
+      );
+   });
+</script>
+</body>
+
+
+</html>
