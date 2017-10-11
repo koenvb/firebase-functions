@@ -32,36 +32,32 @@ exports.transcribeAudio = functions.storage.object().onChange(event => {
     return true;
   }
 
-  return Promise.resolve().then(() => {
-    const audioFilename = "gs://" + fileBucket + "/" + filePath;
-    console.log(audioFilename);
-    const request = {
-      config: {
-        encoding: "FLAC",
-        languageCode: "fr-FR"
-      },
-      audio: {
-        uri: audioFilename
-      }
-    };
+  const audioFilename = "gs://" + fileBucket + "/" + filePath;
+  console.log(audioFilename);
+  const request = {
+    config: {
+      encoding: "FLAC",
+      languageCode: "fr-FR"
+    },
+    audio: {
+      uri: audioFilename
+    }
+  };
 
-    return speech
-      .longRunningRecognize(request)
-      .then(function(responses) {
-        var operation = responses[0];
-        console.log("Operation: ", operation);
-        return operation.promise();
-      })
-      .then(function(responses) {
-        console.log("Result: ", JSON.stringify(responses[0]));
-        bucket.file("json/test.json").save(JSON.stringify(responses[0]));
-        return responses[0];
-      })
-      .catch(function(err) {
-        console.error("Failed to get transcript.", err);
-        //    reject(err);
-      });
-  });
+  speech
+    .longRunningRecognize(request)
+    .then(responses => {
+      var operation = responses[0];
+      console.log("Operation: ", operation);
+      return operation.promise();
+    })
+    .then(responses => {
+      console.log("Result: ", JSON.stringify(responses[0]));
+      bucket.file("json/test.json").save(JSON.stringify(responses[0]));
+    })
+    .catch(function(err) {
+      console.error("Failed to get transcript.", err);
+    });
 });
 
 exports.extractAudio = functions.storage.object().onChange(event => {
@@ -75,45 +71,33 @@ exports.extractAudio = functions.storage.object().onChange(event => {
   // Set the ffmpeg path to use the deployed binaries
   //const binPath =path.resolve(__dirname, "ffmpeg");
   const binPath = ffmpeg_static.path;
-  //ffmpeg.setFfmpegPath(path.resolve(binPath, "ffmpeg"));
-  //ffmpeg.setFfprobePath(path.resolve(binPath, "ffprobe"));
 
   ffmpeg.setFfmpegPath(binPath);
   ffmpeg.setFfprobePath(binPath);
-  console.log(binPath);
 
-  // Exit if this is triggered on a file that is not an image.
-  // Get the file name.
-  //const fileName = path.basename(filePath);
   console.log(filePath + " name: " + fileName);
-  // Exit if the image is already a thumbnail.
+
+  // Exit if the file is not an upload
   if (!filePath.startsWith("ucl-uploads")) {
     console.log("Only uploads need to be converted");
-    return;
+    return true;
   }
   // Exit if this is a move or deletion event.
   if (object.resourceState === "not_exists") {
     console.log("This is a deletion event.");
-    return;
+    return true;
   }
 
-  return Promise.resolve()
-    .then(() => {
-      console.log("downloading audio file...");
-      console.log("Filename: " + fileName);
-      //return downloadFile(audioFile, event.data.name);
-      console.log("tempFilePath: " + tempFilePath);
-      return bucket
-        .file(filePath)
-        .download({ destination: tempFilePath })
-        .catch(err => {
-          console.error("Failed to download file.", err);
-          return Promise.reject(err);
-        });
-    })
+  console.log("downloading audio file...");
+  console.log("Filename: " + fileName);
+
+  // Start download
+  return bucket
+    .file(filePath)
+    .download({ destination: tempFilePath })
     .then(fileinfo => {
       return new Promise((resolve, reject) => {
-        console.log("Start conversion");
+        console.log("Start conversion:", fileinfo);
         ffmpeg(tempFilePath)
           .inputOptions("-vn")
           .format("flac")
@@ -124,30 +108,22 @@ exports.extractAudio = functions.storage.object().onChange(event => {
             console.log("extracted audio");
           })
           .on("error", function(err, stdout, stderr) {
-            reject(err);
+            reject(Error(err));
           })
           .run();
       });
     })
     .then(flacOutput => {
-      return new Promise((resolve, reject) => {
-        // TODO: upload FLAC file to Cloud Storage
-        console.log("Start upload");
-        bucket.upload(
-          "/tmp/output.flac",
-          { destination: "ucl-flac-audio/test.flac" },
-          function(err, file, apiResponse) {
-            if (err) {
-              console.log("Error uploading file", err);
-              return reject(err);
-            }
-            console.log("File uploaded");
-            resolve();
-          }
-        );
-      });
+      console.log("Upload file");
+      bucket
+        .upload("/tmp/output.flac", {
+          destination: "ucl-flac-audio/test.flac"
+        })
+        .then(() => {
+          console.log("file uploaded");
+        });
     })
     .catch(err => {
-      return Promise.reject(err);
+      console.err(Error(err));
     });
 });
